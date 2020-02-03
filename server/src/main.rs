@@ -31,7 +31,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .finalize()?;
 
     rocket::custom(config)
-        .mount("/", StaticFiles::from("../client"))
+        .mount("/", StaticFiles::from("public/"))
         .mount("/", routes![fetch_data])
         .launch();
 

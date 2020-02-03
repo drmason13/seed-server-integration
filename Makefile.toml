@@ -1,0 +1,40 @@
+# run `cargo make start` to build everything and start the server
+
+[tasks.start]
+description = "Build and start server, serving the client as static assets"
+workspace = false
+cwd = "server"
+command = "cargo"
+args = ["run"]
+dependencies = [
+    "build",
+    "copy_wasm",
+]
+
+[tasks.build]
+clear = true
+workspace = false
+description = "Build client and server"
+run_task = { name = [ "build_server", "build_client" ] }
+
+[tasks.build_server]
+description = "Build server"
+workspace = false
+command = "cargo"
+args = ["build", "--package", "server"]
+
+[tasks.build_client]
+description = "Build client"
+workspace = false
+install_crate = { crate_name = "wasm-pack", binary = "wasm-pack", test_arg = "-V" }
+command = "wasm-pack"
+args = ["build", "client", "--target", "web", "--out-name", "package", "--dev"]
+
+[tasks.copy_wasm]
+description = "place wasm-pack output in server public/ folder"
+command = "cp"
+args = [
+    "-r",
+    "client/pkg/",
+    "server/public/",
+]
