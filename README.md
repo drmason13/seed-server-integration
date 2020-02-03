@@ -278,8 +278,6 @@ button![simple_ev(Ev::Click, Msg::FetchData), "Fetch data"],
 
 Other options are on page load, which I remember reading is possible, but the exact details escape me right now.
 
-```
-
 ## Responding to requests
 
 Rocket makes this easy :)
