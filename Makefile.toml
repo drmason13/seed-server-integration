@@ -1,15 +1,25 @@
 # run `cargo make start` to build everything and start the server
 
+[env]
+# all workspace members can use this Makefile
+PORT = "3000"
+
 [tasks.start]
 description = "Build and start server, serving the client as static assets"
 workspace = false
 cwd = "server"
 command = "cargo"
-args = ["run"]
+args = ["run", "--", "${PORT}"]
 dependencies = [
     "build",
     "copy_wasm",
 ]
+
+[tasks.watch]
+description = "Build, create wasms, and watch/recompile files for changes"
+workspace = false
+dependencies = ["build", "copy_wasm"]
+watch = { ignore_pattern="pkg/*" }
 
 [tasks.build]
 clear = true

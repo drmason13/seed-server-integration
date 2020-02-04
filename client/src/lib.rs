@@ -1,6 +1,6 @@
 use seed::{*, prelude::*};
 
-use shared::Data;
+pub use shared;
 
 // ---
 //
@@ -10,13 +10,13 @@ use shared::Data;
 
 #[derive(Default)]
 pub struct Model {
-    pub data: Option<Data>,
+    pub data: Option<shared::Data>,
 }
 
 #[derive(Clone)]
 enum Msg {
     FetchData,
-    Fetched(fetch::ResponseDataResult<Data>),
+    Fetched(fetch::ResponseDataResult<shared::Data>),
 }
 
 // ---
@@ -26,10 +26,20 @@ enum Msg {
 // ---
 
 async fn fetch_data() -> Result<Msg, Msg> {
-    let url = "http://localhost:3000/data";
+    let url = "/api/data";
 
     Request::new(url)
         .method(Method::Get)
+        .fetch_json_data(Msg::Fetched)
+        .await
+}
+
+async fn post_data() -> Result<Msg, Msg> {
+    let url = "/api/data";
+
+    Request::new(url)
+        .method(Method::Post)
+        .send_json(&shared::Data { val: 8, text: "server will error if I don't include text".to_string() })
         .fetch_json_data(Msg::Fetched)
         .await
 }
@@ -64,12 +74,12 @@ fn view(model: &Model) -> Node<Msg> {
     ]
 }
 
-fn view_display_data(data: &Option<Data>) -> Node<Msg> {
+fn view_display_data(data: &Option<shared::Data>) -> Node<Msg> {
     section![
         h3!["data fetched from server:"],
         match data {
             Some(data) => {
-                let Data { val, text } = data;
+                let shared::Data { val, text } = data;
                 p![
                     "Received a value of ",
                     span![
@@ -93,10 +103,11 @@ fn view_display_data(data: &Option<Data>) -> Node<Msg> {
 fn view_post_data_form() -> Node<Msg> {
     section![
         form![
-            attrs!{ At::Action => "/data", At::Method => "Post" },
-            legend!["Update value stored in server:"],
+            attrs!{ At::Action => "/api/data", At::Method => "Post" },
+            legend!["Update data stored in server:"],
             "value:", br![],
             input![ attrs!{ At::Type => "text", At::Name => "val", At::Placeholder => "value" } ], br![], br![],
+            input![ attrs!{ At::Type => "text", At::Name => "text", At::Placeholder => "text" } ], br![], br![],
             input![ attrs!{ At::Type => "submit", At::Value => "Update" } ],
         ]
     ]
