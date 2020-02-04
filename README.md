@@ -13,6 +13,7 @@ This is a cargo [workspace](https://doc.rust-lang.org/book/ch14-03-cargo-workspa
 The workspace was made by simply creating a new directory and adding a `Cargo.toml` with the following content:
 
 Cargo.toml
+
 ```
 [workspace]
 
@@ -34,6 +35,7 @@ data types, in this toy example:, just the `Data` struct.
 The client was created using `cargo new --lib client` and editing Cargo.toml to read:
 
 client/Cargo.toml
+
 ```
 [package]
 name = "client"
@@ -46,29 +48,27 @@ crate-type = ["cdylib"]
 
 [dependencies]
 seed = "0.5.1"
-shared = { path = "../shared" }
 wasm-bindgen = "0.2.58"
 
-[dev-dependencies]
-wasm-bindgen-test = "0.3.8"
+shared = { path = "../shared" }
 ```
 
 `shared = { path = "../shared" }` points to our "shared types crate" locally, it's not published on crates.io.
-More on this create later.
+More on this crate later.
 
 ### server
 
 `server` is a rocket application that will serve two purposes:
 
-1. To serve the static assets of the web app itself (html, css and js)
-2. To process requests received from the web app (a REST API)
+1.  To serve the static assets of the web app itself (html, css and js)
+2.  To process requests received from the web app (a REST API)
 
 It uses the [rocket](https://crates.io/crates/rocket) crate to do this, which requires the nightly compiler. An alternative that runs on stable rust is [Actix-web](https://crates.io/crates/actix-web).
-
 
 The server is a binary package and is made using `cargo new server` and editing the Cargo.toml:
 
 server/Cargo.toml
+
 ```
 [package]
 name = "server"
@@ -82,19 +82,24 @@ edition = "2018"
 rocket = "0.4.2"
 rocket_contrib = "0.4.2"
 serde = { version = "1.0.104", features = ['derive'] }
-serde_derive = "1.0.104"
 serde_json = "1.0.45"
-shared = { path = "../shared" }
+
+shared = { path = "../shared", features = ["rocket"] }
 ```
 
 ### shared
 
-shared is just a library of types for use by both client and server. The only type defined in this simple project is the Data struct:
+shared is a library of types for use by both client and server. The only type defined is the Data struct:
 
 shared/src/lib.rs
-```
-use serde::{Serialize, Deserialize};
 
+```
+use serde::{Deserialize, Serialize};
+
+#[cfg(feature = "rocket")]
+use rocket::request::FromForm;
+
+#[cfg_attr(feature = "rocket", derive(FromForm))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Data {
     pub val: i8,
@@ -102,8 +107,34 @@ pub struct Data {
 }
 ```
 
-It derives serde's traits so that it can be sent to/from the client/server as JSON. The exact rust types survive this process thanks to [serde](https://crates.io/crates/serde)
+It derives serde's traits so that it can be sent to/from the client/server as
+JSON. The exact rust types survive this process thanks to
+[serde](https://crates.io/crates/serde).
 
+We also impl rocket's
+[`FromForm`](https://rocket.rs/v0.4/guide/requests/#forms) to make the trait
+available to the server. This is a complicated by the fact that rocket failed
+to compile to wasm. We are able to gate this implementation behind a "rocket"
+feature and make rocket an optional dependency. As well as be able to compile
+to wasm, this has the added benefit of keeping the client crate small.
+
+```
+#[cfg(feature = "rocket")]
+```
+
+and
+
+```
+#[cfg_attr(feature = "rocket", derive(FromForm))]
+```
+
+are used to do this. Only crates enabling the feature in Cargo.toml
+
+```
+features = ["rocket"]
+```
+
+will compile the rocket dependency.
 
 ## Build
 
@@ -118,6 +149,7 @@ wasm-pack build client --target web --out-name package --dev
 The name is used in this index.html file in the server crate in public/:
 
 server/public/index.html
+
 ```
 <!DOCTYPE html>
 <html lang="en">
@@ -146,7 +178,7 @@ server/public/index.html
 ```
 
 `import init from pkg/package.js` is the bind code that hooks in our web
-assembly frontend code, *package* is the `--out-name` passed to wasm-pack. It's
+assembly frontend code, _package_ is the `--out-name` passed to wasm-pack. It's
 arbitrary but we must be consistent.
 
 The `pkg/` folder is created by wasm-pack and contains our wasm code, so we
@@ -176,6 +208,7 @@ cargo make start
 To build everything, copy the wasm files to where we need them and start the server.
 
 Makefile.toml
+
 ```
 # run `cargo make start` to build everything and start the server
 
@@ -226,11 +259,13 @@ Note: You will need to install cargo-make first, it's another [cargo subcommand]
 TL;DR
 
 add a variant to your `Msg` that can store a response [seed has its own types for this]()
+
 ```
     Fetched(fetch::ResponseDataResult<Data>),
 ```
 
 add a function to do the fetching, it can return a `Result`
+
 ```
 async fn fetch_data() -> Result<Msg, Msg> {
     let url = "http://localhost:3000/data";
@@ -249,9 +284,9 @@ Very convenient, and if you do want to check the server response, there's
 
 Add Msg Handlers (match arms) to the update function:
 
-1. `Msg::FetchData` triggers the fetching of the data
-2. `Msg::Fetched(Ok(data)) handles the happy path of getting the data ok`
-3. `Msg::Fetched(Err(err)) handles the unhappy path of an error from the server`
+1.  `Msg::FetchData` triggers the fetching of the data
+2.  `Msg::Fetched(Ok(data)) handles the happy path of getting the data ok`
+3.  `Msg::Fetched(Err(err)) handles the unhappy path of an error from the server`
 
 ```
 fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
@@ -272,6 +307,7 @@ fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
 ```
 
 Of course you will want a way to trigger the fetching of the data. One option is a button in the view somewhere:
+
 ```
 button![simple_ev(Ev::Click, Msg::FetchData), "Fetch data"],
 ```
