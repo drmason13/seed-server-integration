@@ -2,16 +2,10 @@
 
 use rocket::{
     self,
-    get,
-    post,
+    config::{Config, Environment},
+    get, post,
+    request::Form,
     routes,
-    request::{
-        Form,
-    },
-    config::{
-        Config,
-        Environment
-    }
 };
 
 use rocket_contrib::serve::StaticFiles;

@@ -1,7 +1,7 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "rocket")]
-use rocket::request::{FromForm};
+use rocket::request::FromForm;
 
 #[cfg_attr(feature = "rocket", derive(FromForm))]
 #[derive(Debug, Clone, Serialize, Deserialize)]

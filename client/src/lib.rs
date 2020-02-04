@@ -1,4 +1,4 @@
-use seed::{*, prelude::*};
+use seed::{prelude::*, *};
 
 pub use shared;
 
@@ -39,7 +39,10 @@ async fn post_data() -> Result<Msg, Msg> {
 
     Request::new(url)
         .method(Method::Post)
-        .send_json(&shared::Data { val: 8, text: "server will error if I don't include text".to_string() })
+        .send_json(&shared::Data {
+            val: 8,
+            text: "server will error if I don't include text".to_string(),
+        })
         .fetch_json_data(Msg::Fetched)
         .await
 }
@@ -48,15 +51,15 @@ fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
     match msg {
         Msg::FetchData => {
             orders.skip().perform_cmd(fetch_data());
-        },
+        }
         Msg::Fetched(Ok(data)) => {
             model.data = Some(data);
-        },
+        }
         Msg::Fetched(Err(err)) => {
             model.data = None;
             error!(format!("Fetch error: {:?}", err));
             orders.skip();
-        },
+        }
     }
 }
 
@@ -83,7 +86,7 @@ fn view_display_data(data: &Option<shared::Data>) -> Node<Msg> {
                 p![
                     "Received a value of ",
                     span![
-                        style!{
+                        style! {
                             St::Color => if *val < 0 { "red" } else { "blue" };
                         },
                         val.to_string()
@@ -92,29 +95,31 @@ fn view_display_data(data: &Option<shared::Data>) -> Node<Msg> {
                     br![],
                     text,
                 ]
-            },
+            }
             None => {
-                p![ "no data!" ]
-            },
+                p!["no data!"]
+            }
         },
     ]
 }
 
 fn view_post_data_form() -> Node<Msg> {
-    section![
-        form![
-            attrs!{ At::Action => "/api/data", At::Method => "Post" },
-            legend!["Update data stored in server:"],
-            "value:", br![],
-            input![ attrs!{ At::Type => "text", At::Name => "val", At::Placeholder => "value" } ], br![], br![],
-            input![ attrs!{ At::Type => "text", At::Name => "text", At::Placeholder => "text" } ], br![], br![],
-            input![ attrs!{ At::Type => "submit", At::Value => "Update" } ],
-        ]
-    ]
+    section![form![
+        attrs! { At::Action => "/api/data", At::Method => "Post" },
+        legend!["Update data stored in server:"],
+        "value:",
+        br![],
+        input![attrs! { At::Type => "text", At::Name => "val", At::Placeholder => "value" }],
+        br![],
+        br![],
+        input![attrs! { At::Type => "text", At::Name => "text", At::Placeholder => "text" }],
+        br![],
+        br![],
+        input![attrs! { At::Type => "submit", At::Value => "Update" }],
+    ]]
 }
 
 #[wasm_bindgen(start)]
 pub fn run() {
-    App::builder(update, view)
-        .build_and_start();
+    App::builder(update, view).build_and_start();
 }
