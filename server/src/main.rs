@@ -1,53 +1,43 @@
 #![feature(proc_macro_hygiene, decl_macro)]
-
+use anyhow::{anyhow, Context, Result};
 use rocket::{
     self,
     config::{Config, Environment},
     get, post,
-    request::Form,
     routes,
 };
+use rocket_contrib::{serve::StaticFiles, json::Json};
 
-use rocket_contrib::serve::StaticFiles;
+use shared::user::{self, fields::*};
 
-pub use shared::Data;
-
-#[get("/api/data")]
-fn fetch_data() -> String {
-    let data = Data {
-        val: 8,
-        text: "Hello from Server".to_string(),
-    };
-
-    serde_json::to_string(&data).unwrap()
-}
-
-#[post("/api/data", data = "<data>")]
-fn post_data(data: Form<Data>) -> String {
-    if data.val > 7 {
-        let response = Data {
-            val: data.val,
-            text: "Greater than 7".to_string(),
-        };
-        serde_json::to_string(&response).unwrap()
+fn make_token(pwd: &Password) -> Result<Token> {
+    if pwd.len() < 8 {
+        Err(anyhow!("Password too short"))
     } else {
-        if data.text.contains("ping") {
-            let response = Data {
-                val: data.val,
-                text: "pong".to_string(),
-            };
-            serde_json::to_string(&response).unwrap()
-        } else {
-            let response = Data {
-                val: data.val,
-                text: "No Comment".to_string(),
-            };
-            serde_json::to_string(&response).unwrap()
-        }
+        Ok(Token("123456".to_string()))
     }
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+#[post("/users", data = "<new_user>")]
+fn create_user(new_user: Json<user::create::Request>)
+    -> Result<Json<user::create::Response>>
+{
+    let new_user = new_user.clone();
+    let token = make_token(&new_user.password)
+        .context("Failed to create token from Password")?;
+
+    let response = user::create::Response {
+        username: new_user.username,
+        email: new_user.email,
+        token,
+        bio: Bio(String::new()),
+        image: Image(String::new()),
+    };
+
+    Ok(Json(response))
+}
+
+fn main() -> Result<()> {
     let config = Config::build(Environment::Development)
         .address("0.0.0.0")
         .port(3000) //TODO: read from args (gumdrop?)
@@ -55,7 +45,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     rocket::custom(config)
         .mount("/", StaticFiles::from("public/"))
-        .mount("/", routes![fetch_data, post_data])
+        .mount("/api", routes![
+            create_user,
+        ])
         .launch();
 
     Ok(())

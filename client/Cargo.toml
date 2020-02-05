@@ -12,3 +12,5 @@ seed = "0.5.1"
 wasm-bindgen = "0.2.58"
 
 shared = { path = "../shared" }
+web-sys = { version = "0.3.35", features = ["HtmlFormElement", "HtmlFormControlsCollection", "HtmlCollection", "Element"] }
+js-sys = "0.3.35"
