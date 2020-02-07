@@ -8,7 +8,7 @@ use rocket::{
 };
 use rocket_contrib::{serve::StaticFiles, json::Json};
 
-use shared::user::{self, fields::*};
+use shared::users::{self, fields::*};
 
 fn make_token(pwd: &Password) -> Result<Token> {
     if pwd.len() < 8 {
@@ -19,14 +19,14 @@ fn make_token(pwd: &Password) -> Result<Token> {
 }
 
 #[post("/users", data = "<new_user>")]
-fn create_user(new_user: Json<user::create::Request>)
-    -> Result<Json<user::create::Response>>
+fn create_user(new_user: Json<users::create::Request>)
+    -> Result<Json<users::create::Response>>
 {
     let new_user = new_user.clone();
     let token = make_token(&new_user.password)
         .context("Failed to create token from Password")?;
 
-    let response = user::create::Response {
+    let response = users::create::Response {
         username: new_user.username,
         email: new_user.email,
         token,

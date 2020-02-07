@@ -84,57 +84,58 @@ rocket_contrib = "0.4.2"
 serde = { version = "1.0.104", features = ['derive'] }
 serde_json = "1.0.45"
 
-shared = { path = "../shared", features = ["rocket"] }
+shared = { path = "../shared" }
+anyhow = "1.0.26"
+shrinkwraprs = "0.3.0"
 ```
 
 ### shared
 
-shared is a library of types for use by both client and server. The only type defined is the Data struct:
+shared is a library of types for use by both client and server. This
+example defines a small subset of the realworld (conduit) API relating
+to users.
 
-shared/src/lib.rs
+shared/src/users.rs
 
 ```
-use serde::{Deserialize, Serialize};
+use serde::{Serialize, Deserialize};
 
-#[cfg(feature = "rocket")]
-use rocket::request::FromForm;
+pub const URL: &'static str = "/api/users";
 
-#[cfg_attr(feature = "rocket", derive(FromForm))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Data {
-    pub val: i8,
-    pub text: String,
+pub mod fields;
+use fields::*;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Response {
+    pub username: Username,
+    pub email: Email,
+    pub token: Token,
+    pub bio: Bio,
+    pub image: Image,
 }
+
+pub mod create {
+    use serde::{Serialize, Deserialize};
+    use super::fields::*;
+
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    pub struct Request {
+       pub username: Username,
+       pub email: Email,
+       pub password: Password,
+    }
+
+    pub use super::Response;
+}
+
+// ...
 ```
 
-It derives serde's traits so that it can be sent to/from the client/server as
-JSON. The exact rust types survive this process thanks to
-[serde](https://crates.io/crates/serde).
+The module structure is modelled after the API, using CRUD\* for structure.
 
-We also impl rocket's
-[`FromForm`](https://rocket.rs/v0.4/guide/requests/#forms) to make the trait
-available to the server. This is a complicated by the fact that rocket failed
-to compile to wasm. We are able to gate this implementation behind a "rocket"
-feature and make rocket an optional dependency. As well as be able to compile
-to wasm, this has the added benefit of keeping the client crate small.
-
-```
-#[cfg(feature = "rocket")]
-```
-
-and
-
-```
-#[cfg_attr(feature = "rocket", derive(FromForm))]
-```
-
-are used to do this. Only crates enabling the feature in Cargo.toml
-
-```
-features = ["rocket"]
-```
-
-will compile the rocket dependency.
+It derives serde's traits for sending/receiving to/from the
+client/server as JSON. The exact rust types survive this process thanks
+to [serde](https://crates.io/crates/serde).
 
 ## Build
 
@@ -256,52 +257,63 @@ Note: You will need to install cargo-make first, it's another [cargo subcommand]
 
 ## Sending requests
 
-TL;DR
-
-add a variant to your `Msg` that can store a response [seed has its own types for this]()
+Add a variant to your `Msg` that can store a response [seed has its own types for this]()
 
 ```
-    Fetched(fetch::ResponseDataResult<Data>),
+		// we have a type alias wrapping Seed's type
+		type ServerResponse<T> = fetch::ResponseDataResult<T>;
+
+		// ...
+
+enum Msg {
+    UserCreateResponse(ServerResponse<users::create::Response>),
+		// ...
+}
 ```
 
-add a function to do the fetching, it can return a `Result`
+Add a function to do the sending, it can return a `Result`.
+It should use the type for the request imported from `shared`.
 
 ```
-async fn fetch_data() -> Result<Msg, Msg> {
-    let url = "http://localhost:3000/data";
-
-    Request::new(url)
-        .method(Method::Get)
-        .fetch_json_data(Msg::Fetched)
+async fn send_user_create_request(user: shared::users::create::Request)
+    -> Result<Msg, Msg>
+{
+    Request::new(shared::users::URL)
+        .method(Method::Post)
+        .send_json(&user)
+        .fetch_json_data(Msg::UserCreateResponse)
         .await
 }
 ```
 
-`fetch_json_data()` assumes that we are uninterested in the full server
-response (status, headers as well as data) and just gives the data to a Msg.
+Seed's `fetch_json_data()` assumes that we are uninterested in the full server
+response (status, headers as well as data) and just passes the data to a Msg.
 Very convenient, and if you do want to check the server response, there's
 `fetch_json()`
 
 Add Msg Handlers (match arms) to the update function:
 
-1.  `Msg::FetchData` triggers the fetching of the data
-2.  `Msg::Fetched(Ok(data)) handles the happy path of getting the data ok`
-3.  `Msg::Fetched(Err(err)) handles the unhappy path of an error from the server`
+1.  `Msg::FormSubmit` triggers the sending of the data
+2.  `Msg::UserCreateResponse(Ok(data)) handles the happy path of getting the data ok`
+3.  `Msg::UserCreateResponse(Err(err)) handles the unhappy path of an error from the server`
 
 ```
 fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
     match msg {
-        Msg::FetchData => {
-            orders.skip().perform_cmd(fetch_data());
-        },
-        Msg::Fetched(Ok(data)) => {
-            model.data = Some(data);
-        },
-        Msg::Fetched(Err(err)) => {
-            model.data = None;
-            error!(format!("Fetch error: {:?}", err));
+        Msg::UserCreateResponse(Ok(data)) => {
+            log!(data);
+            model.user = Some(data);
+        }
+        Msg::UserCreateResponse(Err(err)) => {
+            error!(format!("User creation error: {:?}", err));
+            model.user = None;
             orders.skip();
-        },
+        }
+        Msg::FormSubmit => {
+            orders.perform_cmd(
+                send_user_create_request(model.form.clone())
+            );
+        }
     }
 }
 ```
@@ -309,7 +321,7 @@ fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
 Of course you will want a way to trigger the fetching of the data. One option is a button in the view somewhere:
 
 ```
-button![simple_ev(Ev::Click, Msg::FetchData), "Fetch data"],
+button![simple_ev(Ev::Click, Msg::FormSubmit), "Register User"],
 ```
 
 Other options are on page load, which I remember reading is possible, but the exact details escape me right now.
@@ -321,15 +333,21 @@ Rocket makes this easy :)
 TL;DR
 
 ```
-#[get("/data")]
-fn fetch_data() -> String {
-    // ...
-    serde_json::to_string(&data).unwrap()
+#[post("/users", data = "<new_user>")]
+fn create_user(new_user: Json<users::create::Request>)
+    -> Result<Json<users::create::Response>>
+    // ... do stuff and create response
+    Ok(Json(response))
 }
 ```
+
+The exact type of `response` (`users::create::Response`) arrives inside
+the Msg in client. The types are in fact identical since they are both
+imported from `shared`.
 
 ## Tests
 
 This example doesn't include tests, and I removed the dependency on
 `wasm-bindgen-test` to avoid distraction. However, a real project will need
-tests and I'd like to add the setup for them to this repo once I know how they work.
+tests and I'd like to add the setup for them to this repo once I know
+how they work.

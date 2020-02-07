@@ -1,6 +1,6 @@
 use seed::{prelude::*, *};
 
-pub use shared::user::{self, fields::*};
+pub use shared::users::{self, fields::*};
 
 type ServerResponse<T> = fetch::ResponseDataResult<T>;
 
@@ -10,13 +10,33 @@ type ServerResponse<T> = fetch::ResponseDataResult<T>;
 //
 // ---
 
-#[derive(Default)]
-pub struct Model {}
+#[derive(Debug)]
+pub struct Model {
+    // can the Api be used as a "form" directly?
+    // Or do we need to write a `Form` for every Request that needs one?
+    // simply hardcoded for now, still working on forms
+    form: users::create::Request,
+    user: Option<users::create::Response>,
+}
 
-#[derive(Clone)]
+impl Default for Model {
+    fn default() -> Self {
+        Self {
+            form: users::create::Request {
+                username: Username("Dave".to_string()),
+                email: Email("TODO: Validation".to_string()),
+                password: Password("12345678".to_string()),
+            },
+            user: None,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
 enum Msg {
-    Fetched(ServerResponse<user::create::Response>),
-    Test,
+    UserCreateResponse(ServerResponse<users::create::Response>),
+    FormSubmit,
+    FormChange,
 }
 
 // ---
@@ -25,31 +45,33 @@ enum Msg {
 //
 // ---
 
-async fn post_data() -> Result<Msg, Msg> {
-    Request::new(shared::user::URL)
+async fn send_user_create_request(user: shared::users::create::Request)
+    -> Result<Msg, Msg>
+{
+    Request::new(shared::users::URL)
         .method(Method::Post)
-        .send_json(&shared::user::create::Request {
-            username: Username("Dave".to_string()),
-            email: Email("TODO: Validation".to_string()),
-            password: Password("12345678".to_string()),
-        })
-        .fetch_json_data(Msg::Fetched)
+        .send_json(&user)
+        .fetch_json_data(Msg::UserCreateResponse)
         .await
 }
 
 fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
     match msg {
-        Msg::Fetched(Ok(data)) => {
+        Msg::UserCreateResponse(Ok(data)) => {
             log!(data);
+            model.user = Some(data);
+        }
+        Msg::UserCreateResponse(Err(err)) => {
+            error!(format!("User creation error: {:?}", err));
+            model.user = None;
             orders.skip();
         }
-        Msg::Fetched(Err(err)) => {
-            error!(format!("Fetch error: {:?}", err));
-            orders.skip();
+        Msg::FormSubmit => {
+            orders.perform_cmd(
+                send_user_create_request(model.form.clone())
+            );
         }
-        Msg::Test => {
-            orders.perform_cmd(post_data());
-        }
+        Msg::FormChange => unimplemented!()
     }
 }
 
@@ -61,7 +83,33 @@ fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
 
 fn view(model: &Model) -> Node<Msg> {
     main![
-        button![simple_ev(Ev::Click, Msg::Test), "Register Dummy User (temp)"],
+        h3!["Dummy Form"],
+        form![
+            input!["username", attrs!{
+                At::Name => "username",
+                At::Type => "text",
+                At::Value => model.form.username.as_str(),
+            }],
+            input!["email", attrs!{
+                At::Name => "email",
+                At::Type => "text",
+                At::Value => model.form.email.as_str(),
+            }],
+            input!["password", attrs!{
+                At::Name => "password",
+                At::Type => "password",
+                At::Value => model.form.password.as_str(),
+            }],
+        ],
+        button![simple_ev(Ev::Click, Msg::FormSubmit), "Register Dummy User"],
+        if let Some(ref user) = model.user {
+            section![
+                h3!["Registered user"],
+                p![format!("username: `{:?}`", user.username)],
+                p![format!("token: `{:?}`", user.token)],
+                p![format!("bio: `{:?}`", user.bio)],
+            ]
+        } else { empty![] }
     ]
 }
 
